@@ -62,6 +62,7 @@
     </Compile>
     <Compile Include="ByteListEx.cs" />
     <Compile Include="SocketUtil.cs" />
+    <Compile Include="SocketUtil.ResponseThread.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MainWindow.xaml.cs">

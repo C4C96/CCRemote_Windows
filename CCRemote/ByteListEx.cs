@@ -36,9 +36,9 @@ namespace CCRemote
 			if (index < 0 ||
 				index + 4 > list.Count)
 				throw new IndexOutOfRangeException();
-			return list[index] << 24
-				+ list[index + 1] << 16
-				+ list[index + 2] << 8
+			return (list[index] << 24)
+				+ (list[index + 1] << 16)
+				+ (list[index + 2] << 8)
 				+ list[index + 3];
 		}
 	}

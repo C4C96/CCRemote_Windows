@@ -70,7 +70,7 @@ namespace CCRemote
 
 			#endregion
 
-			Port = 1234;
+			Port = 1234; // TODO: 这玩意是临时的
 
 			SocketUtil socketUtil = new SocketUtil(Port);
 			new Thread(socketUtil.UdpListener) { IsBackground = true }.Start();

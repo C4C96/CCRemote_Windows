@@ -12,25 +12,24 @@ namespace CCRemote
 	/// <summary>
 	/// 处理网络请求的工具类
 	/// </summary>
-	public class SocketUtil
+	public partial class SocketUtil
 	{
 		#region Constants
 
 		// UDP请求和对应的回应
-		private const String UDP_REQUEST = "nya?";
-		private const String UDP_RESPONSE = "nya!";
+		private const string UDP_REQUEST = "nya?";
+		private const string UDP_RESPONSE = "nya!";
 
 		// TCP缓冲区大小
 		private const int TCP_BUFFER_SIZE = 1024;
 
-		//　TCP的消息中，前　TCP_SIZE_LENGTH　字节表示该消息的总长度
-		//　后　TCP_HEAD_LENGTH　字节表示消息头
-		//　剩余为消息内容
+		// TCP收到的消息中，前　TCP_SIZE_LENGTH　字节表示该消息的总长度
+		// 后 TCP_NUM_LENGTH 字节表示消息编号
+		// 之后　TCP_HEAD_LENGTH　字节表示消息头
+		// 剩余为消息内容
 		private const int TCP_SIZE_LENGTH = 4;
+		private const int TCP_NUM_LENGTH = 4;
 		private const int TCP_HEAD_LENGTH = 4;
-
-		// Tcp请求头的类型
-		private const int GET_FILE_SYSTEM_ENTRIES = 233;
 		
 		#endregion
 
@@ -101,7 +100,7 @@ namespace CCRemote
 			{
 				var ns = client.GetStream();
 				byte[] buffer = new byte[TCP_BUFFER_SIZE];
-				List<byte> request; // 头 + 内容
+				List<byte> request; // 编号 + 头 + 内容
 				int count;
 				while (true)
 				{
@@ -120,73 +119,30 @@ namespace CCRemote
 						for (int i = 0; i < count; i++) request.Add(buffer[i]);
 						remain -= count;
 					}
-					if (request.Count < TCP_HEAD_LENGTH)
+					if (request.Count < TCP_NUM_LENGTH + TCP_HEAD_LENGTH)
 						continue; // 继续见鬼
 
 					#endregion
-					
-					// TODO: 计算并发送回应可以改成并行，但要注意request需传值
-					List<byte> response = GetTcpResponse(request); // 头 + 内容
-					List<byte> sendBytes = new List<byte>(response.Count + TCP_SIZE_LENGTH); // 发送的内容（长度 + 头 + 内容）
-					sendBytes.AddInt(response.Count + TCP_SIZE_LENGTH);
-					sendBytes.AddRange(response);
 
-					ns.Write(sendBytes.ToArray(), 0, sendBytes.Count);			
+					Task.Factory.StartNew((o) => 
+					{
+						ResponseThread thread = o as ResponseThread;
+						List<byte> body = thread.GetResponse(); // 回应的内容
+						if (body != null)
+						{
+							// 回应的格式为 长度 + 编号 + 内容
+							int length = TCP_SIZE_LENGTH + TCP_NUM_LENGTH + body.Count;
+							List<byte> response = new List<byte>();
+							response.AddInt(length);
+							response.AddInt(thread.Number);
+							response.AddRange(body);
+
+							ns.Write(response.ToArray(), 0, response.Count);
+						}
+					}, new ResponseThread(request));
 				}
 			}
 		}
-
-		/// <summary>
-		/// 处理一条Tcp请求
-		/// </summary>
-		/// <param name="request">收到的请求的头+内容</param>
-		/// <returns>需要返回的头+内容</returns>
-		private List<byte> GetTcpResponse(List<byte> request)
-		{
-			int head = request.GetInt();
-			List<byte> body = request.GetRange(TCP_HEAD_LENGTH, request.Count - TCP_HEAD_LENGTH);
-			switch (head)
-			{
-				case GET_FILE_SYSTEM_ENTRIES:
-					return Tcp_GetFileSystemEntries(body);
-				default:
-					return new List<byte>();
-			}
-		}
-
-		#region Tcp Response Method
-
-		/// <summary>
-		/// 对于目录内容的回应
-		/// 回应的格式：头 + (属性 + 路径字节数 + 路径) * N
-		///					4字节		4字节
-		/// </summary>
-		/// <param name="request"></param>
-		/// <returns></returns>
-		private List<byte> Tcp_GetFileSystemEntries(List<byte> request)
-		{
-			const int MASK = (int) (FileAttributes.Hidden | FileAttributes.System);
-
-			List<byte> response = new List<byte>();
-			response.AddInt(GET_FILE_SYSTEM_ENTRIES);
-
-			string directoryPath = Encoding.UTF8.GetString(request.ToArray());
-			string[] pathes = Directory.GetFileSystemEntries(directoryPath);
-			foreach (var path in pathes)
-			{
-				int attributes = (int)File.GetAttributes(path);
-				if ((attributes & MASK) == MASK)
-					continue; // 略过系统隐藏文件，如$RECYCLE.BIN
-				byte[] pathBytes = Encoding.UTF8.GetBytes(path);
-
-				response.AddInt(attributes);
-				response.AddInt(pathBytes.Length);
-				response.AddRange(pathBytes);
-			}
-			return response;
-		}
-
-		#endregion
 
 		#endregion
 	}
