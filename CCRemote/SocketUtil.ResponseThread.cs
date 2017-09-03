@@ -43,8 +43,8 @@ namespace CCRemote
 
 			public ResponseThread(List<byte> request)
 			{
-				request.GetInt();
-				request.GetInt(TCP_NUM_LENGTH);
+				number = request.GetInt();
+				head = request.GetInt(TCP_NUM_LENGTH);
 				body = request.GetRange(TCP_NUM_LENGTH + TCP_HEAD_LENGTH,
 					request.Count - TCP_NUM_LENGTH - TCP_HEAD_LENGTH);
 			}
@@ -54,7 +54,7 @@ namespace CCRemote
 			/// <summary>
 			/// 获取回应的内容，若无回应，则返回null
 			/// </summary>
-			/// <returns></returns>
+			/// <returns> 回应消息的内容 </returns>
 			public List<byte> GetResponse()
 			{
 				switch (head)
@@ -78,6 +78,7 @@ namespace CCRemote
 			private List<byte> GetFileSystemEntries(List<byte> body)
 			{
 				List<byte> response = new List<byte>();
+				List<string> ignore = new List<string>{ "$RECYCLE.BIN", "System Volume Information"}; 
 
 				try
 				{
@@ -86,9 +87,9 @@ namespace CCRemote
 					foreach (var path in pathes)
 					{
 						int attributes = (int)File.GetAttributes(path);
-						//if ((attributes & MASK) == MASK)
-						//continue; 
-						//TODO:略过系统隐藏文件，如$RECYCLE.BIN
+						string pathWithOutDisk = path.Substring(3);
+						if (!ignore.TrueForAll((str) => str != pathWithOutDisk)) // TODO 对于盘中盘下的回收站需要修改
+							continue;
 						byte[] pathBytes = Encoding.UTF8.GetBytes(path);
 
 						response.AddInt(attributes);
