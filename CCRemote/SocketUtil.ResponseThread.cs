@@ -15,7 +15,8 @@ namespace CCRemote
 			#region Constants
 
 			// Tcp请求头的类型
-			private const int FILE_SYSTEM_ENTRIES = 233;
+			private const int GET_FILE_SYSTEM_ENTRIES = 233;
+			private const int GET_DISKS = 114514;
 
 			#endregion
 
@@ -59,8 +60,10 @@ namespace CCRemote
 			{
 				switch (head)
 				{
-					case FILE_SYSTEM_ENTRIES:
+					case GET_FILE_SYSTEM_ENTRIES:
 						return GetFileSystemEntries(body);
+					case GET_DISKS:
+						return GetDisks();
 					default:
 						return null;
 				}
@@ -70,15 +73,16 @@ namespace CCRemote
 
 			/// <summary>
 			/// 对于目录内容的回应
-			/// 回应的格式：(属性 + 路径字节数 + 路径) * N
-			///			     4字节	   4字节
+			/// 请求格式：路径
+			/// 回应格式：(属性 + 路径字节数 + 路径) * N
+			///			   4字节    4字节
 			/// </summary>
 			/// <param name="body"></param>
-			/// <returns></returns>
+			/// <returns> 回应 </returns>
 			private List<byte> GetFileSystemEntries(List<byte> body)
 			{
 				List<byte> response = new List<byte>();
-				List<string> ignore = new List<string>{ "$RECYCLE.BIN", "System Volume Information"}; 
+				FileAttributes mask = FileAttributes.Hidden | FileAttributes.System;
 
 				try
 				{
@@ -86,18 +90,38 @@ namespace CCRemote
 					string[] pathes = Directory.GetFileSystemEntries(directoryPath);
 					foreach (var path in pathes)
 					{
-						int attributes = (int)File.GetAttributes(path);
-						string pathWithOutDisk = path.Substring(3);
-						if (!ignore.TrueForAll((str) => str != pathWithOutDisk)) // TODO 对于盘中盘下的回收站需要修改
+						FileAttributes attributes = File.GetAttributes(path);
+						if ((attributes & mask) == mask) // 不显示系统隐藏文件
 							continue;
-						byte[] pathBytes = Encoding.UTF8.GetBytes(path);
 
-						response.AddInt(attributes);
-						response.AddInt(pathBytes.Length);
-						response.AddRange(pathBytes);
+						response.AddInt((int)attributes);
+						response.AddString(path);
 					}
 				}
 				catch { }
+				return response;
+			}
+
+			/// <summary>
+			/// 对于磁盘目录请求的回应
+			/// 请求格式：（空）
+			/// 回应格式：（路径 + 卷标字节数 + 卷标） * N
+			///	       3字节(X:\)     4字节
+			/// </summary>
+			/// <returns></returns>
+			private List<byte> GetDisks()
+			{
+				List<byte> response = new List<byte>();
+
+				DriveInfo[] disks = DriveInfo.GetDrives();
+				foreach(var disk in disks)
+				{
+					string name = disk.Name;
+					string label = disk.VolumeLabel;
+
+					response.AddRange(Encoding.UTF8.GetBytes(name.Substring(0, 3)));
+					response.AddString(label);
+				}
 				return response;
 			}
 

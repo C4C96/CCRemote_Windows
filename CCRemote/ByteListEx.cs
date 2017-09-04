@@ -41,5 +41,32 @@ namespace CCRemote
 				+ (list[index + 2] << 8)
 				+ list[index + 3];
 		}
+
+		/// <summary>
+		/// 将一个字符串按长度(4字节)+bytes的格式加入队列(UTF-8编码)
+		/// </summary>
+		/// <param name="list"></param>
+		/// <param name="str"></param>
+		public static void AddString(this List<byte> list, string str)
+		{
+			byte[] bytes = Encoding.UTF8.GetBytes(str);
+			list.AddInt(bytes.Length);
+			list.AddRange(bytes);
+		}
+
+		/// <summary>
+		/// 从队列中获取一个字符串
+		/// </summary>
+		/// <param name="list"></param>
+		/// <param name="byteLength"> 队列中被读取的字节数 </param>
+		/// <param name="index"> 起始位置 </param>
+		/// <returns> 获得的字符串 </returns>
+		public static string GetString(this List<byte> list, out int byteLength, int index = 0)
+		{
+			int strLength = list.GetInt(index);
+			List<byte> bytes = list.GetRange(index + 4, strLength);
+			byteLength = strLength + 4;
+			return Encoding.UTF8.GetString(bytes.ToArray());
+		}
 	}
 }
