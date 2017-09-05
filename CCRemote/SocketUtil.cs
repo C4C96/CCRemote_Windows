@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Threading;
 
 namespace CCRemote
 {
@@ -22,6 +23,12 @@ namespace CCRemote
 
 		// TCP缓冲区大小
 		private const int TCP_BUFFER_SIZE = 1024;
+
+		// 心跳请求
+		private static readonly byte[] HEART_BEAT_BYTES = { 6, 30};
+
+		// 心跳间隔
+		private const int HEART_BEAT_DELAY = 1500;
 
 		// TCP收到的消息中，前　TCP_SIZE_LENGTH　字节表示该消息的总长度
 		// 后 TCP_NUM_LENGTH 字节表示消息编号
@@ -86,6 +93,8 @@ namespace CCRemote
 			while (true)
 			{
 				TcpClient client = listener.AcceptTcpClient();
+				// TODO 新接入
+				Console.WriteLine(client.Client.RemoteEndPoint + " connected.");
 				Task.Factory.StartNew(TcpHandle, client);
 			}
 		}
@@ -95,9 +104,11 @@ namespace CCRemote
 		/// </summary>
 		private void TcpHandle(Object tcpClient)
 		{
-			TcpClient client;
-			using (client = tcpClient as TcpClient)
+			TcpClient client = tcpClient as TcpClient;
+			try
 			{
+				Task.Factory.StartNew(HeartBeat, client);
+
 				var ns = client.GetStream();
 				byte[] buffer = new byte[TCP_BUFFER_SIZE];
 				List<byte> request; // 编号 + 头 + 内容
@@ -107,11 +118,13 @@ namespace CCRemote
 					#region Get request
 
 					count = ns.Read(buffer, 0, TCP_BUFFER_SIZE);
-					if (count < TCP_SIZE_LENGTH)
-						continue; // 鬼知道发生了什么，当没看到
-					request = new List<byte>();
-					for (int i = TCP_SIZE_LENGTH; i < count; i++) request.Add(buffer[i]);
+					if (count <= TCP_SIZE_LENGTH)
+						continue; // 忽略过短的非法请求，也可能是心跳请求
 					int size = buffer.GetInt();
+					if (size <= TCP_SIZE_LENGTH)
+						continue;
+					request = new List<byte>();
+					for (int i = TCP_SIZE_LENGTH; i < count; i++) request.Add(buffer[i]);					
 					int remain = size - count;
 					while (remain > 0) // 一个缓冲区装不下的话多装几次
 					{
@@ -120,7 +133,7 @@ namespace CCRemote
 						remain -= count;
 					}
 					if (request.Count < TCP_NUM_LENGTH + TCP_HEAD_LENGTH)
-						continue; // 继续见鬼
+						continue; // 忽略
 
 					#endregion
 
@@ -141,6 +154,33 @@ namespace CCRemote
 						}
 					}, new ResponseThread(request));
 				}
+			}
+			catch (IOException) // Read抛出异常，此处无需client.Close()，会在心跳线程中完成
+			{
+				// TODO 断开
+				Console.WriteLine(client.Client.RemoteEndPoint + " disconnected.");
+			}
+		}
+
+		/// <summary>
+		/// 不断发送心跳请求，发现连接中断则释放资源
+		/// </summary>
+		/// <param name="tcpClient"></param>
+		private void HeartBeat(Object tcpClient)
+		{
+			TcpClient client = tcpClient as TcpClient;
+			try
+			{
+				var ns = client.GetStream();
+				while (true)
+				{
+					ns.Write(HEART_BEAT_BYTES, 0, HEART_BEAT_BYTES.Length);
+					Thread.Sleep(HEART_BEAT_DELAY);
+				}
+			}
+			catch (Exception)
+			{
+				client.Close();
 			}
 		}
 

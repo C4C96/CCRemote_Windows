@@ -8,7 +8,7 @@ namespace CCRemote
 	public partial class SocketUtil
 	{
 		/// <summary>
-		/// 对请求异步作出回应的类
+		/// 对请求异步作出回应的类，并不涉及网络链接
 		/// </summary>
 		private class ResponseThread
 		{
