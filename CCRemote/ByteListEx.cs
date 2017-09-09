@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace CCRemote
 {
@@ -58,15 +56,47 @@ namespace CCRemote
 		/// 从队列中获取一个字符串
 		/// </summary>
 		/// <param name="list"></param>
-		/// <param name="byteLength"> 队列中被读取的字节数 </param>
+		/// <param name="byteLength"> 队列中被读取的字节数，失败则返回0 </param>
 		/// <param name="index"> 起始位置 </param>
-		/// <returns> 获得的字符串 </returns>
+		/// <returns> 获得的字符串，若失败则返回null </returns>
 		public static string GetString(this List<byte> list, out int byteLength, int index = 0)
 		{
+			if (index + 4 > list.Count)
+			{
+				byteLength = 0;
+				return null;
+			}
 			int strLength = list.GetInt(index);
-			List<byte> bytes = list.GetRange(index + 4, strLength);
+			index += 4;
+			if (index + strLength > list.Count)
+			{
+				byteLength = 0;
+				return null;
+			}
+			List<byte> bytes = list.GetRange(index, strLength);
 			byteLength = strLength + 4;
 			return Encoding.UTF8.GetString(bytes.ToArray());
+		}
+
+		/// <summary>
+		/// 从队列中获取一个字符串
+		/// </summary>
+		/// <param name="list"></param>
+		/// <param name="byteLength"> 队列中被读取的字节数，失败则返回0 </param>
+		/// <param name="index"> 起始位置 </param>
+		/// <returns> 获得的字符串，若失败则返回空集合 </returns>
+		public static List<string> GetStringList(this List<byte> list, out int byteLength, int index = 0)
+		{
+			string str;
+			int cursor = index;
+			List<string> ret = new List<string>();
+			while ((str = list.GetString(out int length, cursor)) != null)
+			{
+				ret.Add(str);
+				cursor += length;
+			}
+			byteLength = cursor - index;
+			return ret;
 		}
 	}
 }

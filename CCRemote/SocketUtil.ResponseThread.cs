@@ -1,7 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.VisualBasic.FileIO;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
+using System.Windows;
 
 namespace CCRemote
 {
@@ -17,6 +20,10 @@ namespace CCRemote
 			// Tcp请求头的类型
 			private const int GET_FILE_SYSTEM_ENTRIES = 233;
 			private const int GET_DISKS = 114514;
+			private const int COPY_FILE = 7979;
+			private const int CUT_FILE = 123;
+			private const int PASTE_FILE = 1024;
+			private const int DELETE_FILE = 321;
 
 			#endregion
 
@@ -64,12 +71,26 @@ namespace CCRemote
 						return GetFileSystemEntries(body);
 					case GET_DISKS:
 						return GetDisks();
+					case COPY_FILE:
+						CopyFilesToClipboard(body, true);
+						return null;
+					case CUT_FILE:
+						CopyFilesToClipboard(body, false);
+						return null;
+					case PASTE_FILE:
+						PasteFiles(body);
+						return null;
+					case DELETE_FILE:
+						DeleteFiles(body);
+						return null;
 					default:
 						return null;
 				}
 			}
 
 			#region Tcp Response Method
+
+			#region File System
 
 			/// <summary>
 			/// 对于目录内容的回应
@@ -124,6 +145,117 @@ namespace CCRemote
 				}
 				return response;
 			}
+
+			/// <summary>
+			/// 复制文件到剪贴板
+			/// 请求格式：（路径字节数 + 路径） * N
+			///	              4字节
+			///	回应格式：（空）
+			/// </summary>
+			/// <param name="copy"> 是否是复制，否则是剪切 </param>
+			private void CopyFilesToClipboard(List<byte> body, bool copy)
+			{
+				Thread thread = new Thread(() =>
+				{
+					List<string> files = body.GetStringList(out int length);
+					byte[] moveEffect = { copy ? (byte)DragDropEffects.Copy : (byte)DragDropEffects.Move, 0, 0, 0 };
+					MemoryStream dropEffect = new MemoryStream();
+					dropEffect.Write(moveEffect, 0, moveEffect.Length);
+
+					StringCollection fileColle = new StringCollection();
+					fileColle.AddRange(files.ToArray());
+					DataObject data = new DataObject("Preferred DropEffect", dropEffect);
+					data.SetFileDropList(fileColle);
+
+					Clipboard.Clear();
+					Clipboard.SetDataObject(data, true);
+				});
+				thread.SetApartmentState(ApartmentState.STA); // 在可以调用 OLE 之前，必须将当前线程设置为单线程单元(STA)模式
+				thread.IsBackground = true;
+				thread.Start();
+			}
+
+			/// <summary>
+			/// 从剪贴板粘贴文件到目录
+			/// 请求格式：目录路径
+			/// 回应格式：（空）
+			/// </summary>
+			/// <param name="body"></param>
+			private void PasteFiles(List<byte> body)
+			{
+				Thread thread = new Thread(() => 
+				{
+					string path = Encoding.UTF8.GetString(body.ToArray());
+
+					IDataObject data = Clipboard.GetDataObject();
+					if (data.GetDataPresent(DataFormats.FileDrop))
+					{
+						string[] files = data.GetData(DataFormats.FileDrop) as string[];
+						MemoryStream dropEffect = data.GetData("Preferred DropEffect") as MemoryStream;
+						byte[] moveEffect = new byte[4];
+						dropEffect.Read(moveEffect, 0, moveEffect.Length);
+						foreach (var file in files)
+						{
+							string fileName, extension;
+
+							#region Devide File Name
+
+							int backslashedPos = file.LastIndexOf("\\");
+							int dotPos = file.LastIndexOf(".");
+							if (dotPos != -1)
+							{
+								fileName = file.Substring(backslashedPos + 1, dotPos - backslashedPos - 1);
+								extension = file.Substring(dotPos);
+							}
+							else
+							{
+								fileName = file.Substring(backslashedPos + 1);
+								extension = "";
+							}
+
+							#endregion
+
+							#region Get uniquePath
+
+							string uniquePath = path + fileName + extension;
+							int i = 1;
+							while (File.Exists(uniquePath))
+								uniquePath = path + fileName + "(" + i++ + ")" + extension;
+
+							#endregion
+
+							if (moveEffect[0] == (byte)DragDropEffects.Copy)
+								File.Copy(file, uniquePath);
+							else if (moveEffect[0] == (byte)DragDropEffects.Move)
+								File.Move(file, uniquePath);
+						}
+					}
+				});
+				thread.SetApartmentState(ApartmentState.STA); // 在可以调用 OLE 之前，必须将当前线程设置为单线程单元(STA)模式
+				thread.IsBackground = true;
+				thread.Start();
+			}
+
+			/// <summary>
+			/// 将文件删除到回收站
+			/// 请求格式：（路径字节数 + 路径） * N
+			/// 回应格式：（空）
+			/// </summary>
+			/// <param name="body"></param>
+			private void DeleteFiles(List<byte> body)
+			{
+				List<string> files = body.GetStringList(out int length);
+
+				foreach (var file in files)
+				{
+					if ((File.GetAttributes(file) & FileAttributes.Directory) == FileAttributes.Directory)
+						FileSystem.DeleteDirectory(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+					else
+						FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+				}
+			}
+
+			#endregion
 
 			#endregion
 		}
