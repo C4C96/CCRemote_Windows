@@ -79,7 +79,7 @@ namespace CCRemote
 		}
 
 		/// <summary>
-		/// 从队列中获取一个字符串
+		/// 从队列中获取一组字符串
 		/// </summary>
 		/// <param name="list"></param>
 		/// <param name="byteLength"> 队列中被读取的字节数，失败则返回0 </param>
@@ -97,6 +97,19 @@ namespace CCRemote
 			}
 			byteLength = cursor - index;
 			return ret;
+		}
+
+		public static void AddDouble(this List<byte> list, double d)
+		{
+			list.AddRange(BitConverter.GetBytes(d));
+		}
+
+		public static void AddAsyncOperation(this List<byte> list, AsyncOperation asyncOperation)
+		{
+			list.AddInt(asyncOperation.Id);
+			list.AddString(asyncOperation.Name);
+			list.AddDouble(asyncOperation.MaxValue);
+			list.AddDouble(asyncOperation.Value);
 		}
 	}
 }

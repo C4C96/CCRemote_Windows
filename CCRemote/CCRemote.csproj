@@ -61,9 +61,10 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="AsyncOperation.cs" />
     <Compile Include="ByteListEx.cs" />
+    <Compile Include="FileControl.cs" />
     <Compile Include="SocketUtil.cs" />
-    <Compile Include="SocketUtil.ResponseThread.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MainWindow.xaml.cs">

@@ -6,13 +6,14 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Collections.Concurrent;
 
 namespace CCRemote
 {
 	/// <summary>
 	/// 处理网络请求的工具类
 	/// </summary>
-	public partial class SocketUtil
+	public class SocketUtil
 	{
 		#region Constants
 
@@ -22,12 +23,11 @@ namespace CCRemote
 
 		// TCP缓冲区大小
 		private const int TCP_BUFFER_SIZE = 1024;
-
-		// 心跳请求
-		private static readonly byte[] HEART_BEAT_BYTES = { 6, 30};
-
+		
 		// 心跳间隔
 		private const int HEART_BEAT_DELAY = 1500;
+		// 心跳编号
+		private const int HEART_BEAT_NUMBER = -1;
 
 		// TCP收到的消息中，前　TCP_SIZE_LENGTH　字节表示该消息的总长度
 		// 后 TCP_NUM_LENGTH 字节表示消息编号
@@ -38,10 +38,11 @@ namespace CCRemote
 		private const int TCP_HEAD_LENGTH = 4;
 		
 		#endregion
-
+		
 		#region Filed
 
 		private readonly int port;
+		private ConcurrentBag<AsyncOperation> aoList;
 
 		#endregion
 
@@ -50,6 +51,7 @@ namespace CCRemote
 		public SocketUtil(int port)
 		{
 			this.port = port;
+			aoList = new ConcurrentBag<AsyncOperation>();
 		}
 
 		#endregion
@@ -118,7 +120,7 @@ namespace CCRemote
 
 					count = ns.Read(buffer, 0, TCP_BUFFER_SIZE);
 					if (count <= TCP_SIZE_LENGTH)
-						continue; // 忽略过短的非法请求，也可能是心跳请求
+						continue; // 忽略过短的非法请求
 					int size = buffer.GetInt();
 					if (size <= TCP_SIZE_LENGTH)
 						continue;
@@ -141,17 +143,8 @@ namespace CCRemote
 						ResponseThread thread = o as ResponseThread;
 						List<byte> body = thread.GetResponse(); // 回应的内容
 						if (body != null)
-						{
-							// 回应的格式为 长度 + 编号 + 内容
-							int length = TCP_SIZE_LENGTH + TCP_NUM_LENGTH + body.Count;
-							List<byte> response = new List<byte>();
-							response.AddInt(length);
-							response.AddInt(thread.Number);
-							response.AddRange(body);
-
-							ns.Write(response.ToArray(), 0, response.Count);
-						}
-					}, new ResponseThread(request));
+							Send(ns, thread.Number, body);
+					}, new ResponseThread(request, aoList));
 				}
 			}
 			catch (IOException) // Read抛出异常，此处无需client.Close()，会在心跳线程中完成
@@ -159,6 +152,25 @@ namespace CCRemote
 				// TODO 断开
 				Console.WriteLine(client.Client.RemoteEndPoint + " disconnected.");
 			}
+		}
+
+		/// <summary>
+		/// 发送信息
+		/// 格式为：长度 + 编号 + 内容
+		///			4字节  4字节
+		/// </summary>
+		/// <param name="ns"></param>
+		/// <param name="number"></param>
+		/// <param name="body"></param>
+		private void Send(NetworkStream ns, int number, List<byte> body)
+		{
+			int length = TCP_SIZE_LENGTH + TCP_NUM_LENGTH + body.Count;
+			List<byte> response = new List<byte>();
+			response.AddInt(length);
+			response.AddInt(number);
+			response.AddRange(body);
+
+			ns.Write(response.ToArray(), 0, response.Count);
 		}
 
 		/// <summary>
@@ -173,7 +185,14 @@ namespace CCRemote
 				var ns = client.GetStream();
 				while (true)
 				{
-					ns.Write(HEART_BEAT_BYTES, 0, HEART_BEAT_BYTES.Length);
+					//List<byte> response = new List<byte>();
+					//foreach (var ao in aoList)
+					//	response.AddAsyncOperation(ao);
+					//Send(ns, HEART_BEAT_NUMBER, response);
+					foreach (var ao in aoList)
+						Console.WriteLine($"{ao.Name}: {ao.Value}/{ao.MaxValue}");
+					Console.WriteLine("------------------");
+					Send(ns, HEART_BEAT_NUMBER, new List<byte>());
 					Thread.Sleep(HEART_BEAT_DELAY);
 				}
 			}
@@ -184,5 +203,86 @@ namespace CCRemote
 		}
 
 		#endregion
+
+		/// <summary>
+		/// 对请求异步作出回应的类，并不涉及网络链接
+		/// </summary>
+		private class ResponseThread
+		{
+			#region Constants
+
+			// Tcp请求头的类型
+			private const int GET_FILE_SYSTEM_ENTRIES = 233;
+			private const int GET_DISKS = 114514;
+			private const int COPY_FILE = 7979;
+			private const int CUT_FILE = 123;
+			private const int PASTE_FILE = 1024;
+			private const int DELETE_FILE = 321;
+
+			#endregion
+
+			#region Field
+
+			private int number;      // 编号
+			private int head;        // 头
+			private List<byte> body; // 内容
+			private ConcurrentBag<AsyncOperation> aoList;
+
+			#endregion
+
+			#region Property
+
+			public int Number
+			{
+				get
+				{
+					return number;
+				}
+			}
+
+			#endregion
+
+			#region Constructor
+
+			public ResponseThread(List<byte> request, ConcurrentBag<AsyncOperation> aoList)
+			{
+				number = request.GetInt();
+				head = request.GetInt(TCP_NUM_LENGTH);
+				body = request.GetRange(TCP_NUM_LENGTH + TCP_HEAD_LENGTH,
+					request.Count - TCP_NUM_LENGTH - TCP_HEAD_LENGTH);
+				this.aoList = aoList;
+			}
+
+			#endregion
+
+			/// <summary>
+			/// 获取回应的内容，若无回应，则返回null
+			/// </summary>
+			/// <returns> 回应消息的内容 </returns>
+			public List<byte> GetResponse()
+			{
+				switch (head)
+				{
+					case GET_FILE_SYSTEM_ENTRIES:
+						return FileControl.GetFileSystemEntries(body);
+					case GET_DISKS:
+						return FileControl.GetDisks();
+					case COPY_FILE:
+						FileControl.CopyFilesToClipboard(body, true);
+						return null;
+					case CUT_FILE:
+						FileControl.CopyFilesToClipboard(body, false);
+						return null;
+					case PASTE_FILE:
+						FileControl.PasteFiles(body, aoList);
+						return null;
+					case DELETE_FILE:
+						FileControl.DeleteFiles(body);
+						return null;
+					default:
+						return null;
+				}
+			}
+		}
 	}
 }
