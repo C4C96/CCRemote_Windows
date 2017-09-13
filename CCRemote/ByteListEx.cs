@@ -104,12 +104,18 @@ namespace CCRemote
 			list.AddRange(BitConverter.GetBytes(d));
 		}
 
+		public static void AddLong(this List<byte> list, long l)
+		{
+			list.AddInt((int)(l >> 32));
+			list.AddInt((int)l);
+		}
+
 		public static void AddAsyncOperation(this List<byte> list, AsyncOperation asyncOperation)
 		{
 			list.AddInt(asyncOperation.Id);
 			list.AddString(asyncOperation.Name);
-			list.AddDouble(asyncOperation.MaxValue);
-			list.AddDouble(asyncOperation.Value);
+			list.AddLong(asyncOperation.MaxValue);
+			list.AddLong(asyncOperation.Value);
 		}
 	}
 }

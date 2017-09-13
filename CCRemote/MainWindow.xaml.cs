@@ -31,16 +31,6 @@ namespace CCRemote
 		
 		#endregion
 
-		#region Properties
-
-		public int Port
-		{
-			get;
-			private set;
-		}
-
-		#endregion
-
 		public MainWindow()
 		{
 			InitializeComponent();
@@ -70,9 +60,9 @@ namespace CCRemote
 
 			#endregion
 
-			Port = 1234; // TODO: 这玩意是临时的
+			SocketUtil.Port = 1234; // TODO: 这玩意是临时的
 
-			SocketUtil socketUtil = new SocketUtil(Port);
+			SocketUtil socketUtil = SocketUtil.Instance;
 			new Thread(socketUtil.UdpListener) { IsBackground = true }.Start();
 			new Thread(socketUtil.TcpListener) { IsBackground = true }.Start();
 		}

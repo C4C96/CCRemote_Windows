@@ -142,7 +142,7 @@ namespace CCRemote
 					long size = 0;
 					foreach (var file in files)
 						size += GetSize(file);
-					AsyncOperation ao = new AsyncOperation(string.Format($"Move/Copy {files.Length} files..."), size); // TODO
+					AsyncOperation ao = new AsyncOperation(string.Format("{0} {1} file{2}...", moveEffect[0] == (byte)DragDropEffects.Copy?"Copy":"Move", files.Length, files.Length==1?"":"s"), size); // TODO 文字本地化
 					aoList.Add(ao);
 
 					if (moveEffect[0] == (byte)DragDropEffects.Copy)

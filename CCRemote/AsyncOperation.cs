@@ -16,7 +16,7 @@ namespace CCRemote
 		private static int count = 0;
 		private readonly int id;
 		private readonly string name;
-		private readonly double maxValue;
+		private readonly long maxValue;
 
 		#endregion
 
@@ -38,7 +38,7 @@ namespace CCRemote
 			}
 		}
 
-		public double MaxValue
+		public long MaxValue
 		{
 			get
 			{
@@ -46,12 +46,12 @@ namespace CCRemote
 			}
 		}
 
-		public double Value
+		public long Value
 		{ get; set; }
 
 		#endregion
 
-		public AsyncOperation(string name, double maxValue)
+		public AsyncOperation(string name, long maxValue)
 		{
 			this.name = name;
 			this.maxValue = maxValue;

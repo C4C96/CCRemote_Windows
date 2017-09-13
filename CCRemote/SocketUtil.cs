@@ -13,8 +13,24 @@ namespace CCRemote
 	/// <summary>
 	/// 处理网络请求的工具类
 	/// </summary>
-	public class SocketUtil
+	public partial class SocketUtil
 	{
+		#region Static Members
+
+		public static int Port { get; set; }
+		public static SocketUtil Instance
+		{
+			get
+			{
+				if (instance == null)
+					instance = new SocketUtil(Port);
+				return instance;
+			}
+		}
+		private static SocketUtil instance;
+
+		#endregion
+
 		#region Constants
 
 		// UDP请求和对应的回应
@@ -48,7 +64,7 @@ namespace CCRemote
 
 		#region Constructor
 
-		public SocketUtil(int port)
+		private SocketUtil(int port)
 		{
 			this.port = port;
 			aoList = new ConcurrentBag<AsyncOperation>();
@@ -144,7 +160,7 @@ namespace CCRemote
 						List<byte> body = thread.GetResponse(); // 回应的内容
 						if (body != null)
 							Send(ns, thread.Number, body);
-					}, new ResponseThread(request, aoList));
+					}, new ResponseThread(request));
 				}
 			}
 			catch (IOException) // Read抛出异常，此处无需client.Close()，会在心跳线程中完成
@@ -185,14 +201,10 @@ namespace CCRemote
 				var ns = client.GetStream();
 				while (true)
 				{
-					//List<byte> response = new List<byte>();
-					//foreach (var ao in aoList)
-					//	response.AddAsyncOperation(ao);
-					//Send(ns, HEART_BEAT_NUMBER, response);
+					List<byte> response = new List<byte>();
 					foreach (var ao in aoList)
-						Console.WriteLine($"{ao.Name}: {ao.Value}/{ao.MaxValue}");
-					Console.WriteLine("------------------");
-					Send(ns, HEART_BEAT_NUMBER, new List<byte>());
+						response.AddAsyncOperation(ao);
+					Send(ns, HEART_BEAT_NUMBER, response);
 					Thread.Sleep(HEART_BEAT_DELAY);
 				}
 			}
@@ -226,7 +238,6 @@ namespace CCRemote
 			private int number;      // 编号
 			private int head;        // 头
 			private List<byte> body; // 内容
-			private ConcurrentBag<AsyncOperation> aoList;
 
 			#endregion
 
@@ -244,13 +255,12 @@ namespace CCRemote
 
 			#region Constructor
 
-			public ResponseThread(List<byte> request, ConcurrentBag<AsyncOperation> aoList)
+			public ResponseThread(List<byte> request)
 			{
 				number = request.GetInt();
 				head = request.GetInt(TCP_NUM_LENGTH);
 				body = request.GetRange(TCP_NUM_LENGTH + TCP_HEAD_LENGTH,
 					request.Count - TCP_NUM_LENGTH - TCP_HEAD_LENGTH);
-				this.aoList = aoList;
 			}
 
 			#endregion
@@ -274,7 +284,7 @@ namespace CCRemote
 						FileControl.CopyFilesToClipboard(body, false);
 						return null;
 					case PASTE_FILE:
-						FileControl.PasteFiles(body, aoList);
+						FileControl.PasteFiles(body, SocketUtil.Instance.aoList);
 						return null;
 					case DELETE_FILE:
 						FileControl.DeleteFiles(body);
