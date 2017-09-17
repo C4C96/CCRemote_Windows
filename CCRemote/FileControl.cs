@@ -191,6 +191,8 @@ namespace CCRemote
 		/// <param name="copy"> true为复制，false为剪切 </param>
 		private static void CopyFileSafety(string from, string to, bool copy, AsyncOperation ao)
 		{
+			if (!File.Exists(from))
+				return;
 			if (IsDirectory(from))
 			{
 				CopyDirectory(from, to, copy, ao);
@@ -246,6 +248,8 @@ namespace CCRemote
 		/// <param name="copy"> true为复制，false为剪切 </param>
 		private static void CopyDirectory(string from, string to, bool copy, AsyncOperation ao)
 		{
+			if (!Directory.Exists(from))
+				return;
 			if (!IsDirectory(from))
 			{
 				CopyFileSafety(from, to, copy, ao);
@@ -256,13 +260,16 @@ namespace CCRemote
 			if (backslashedPos == -1 || backslashedPos == from.Length - 1)
 				return;
 			string directoryName = from.Substring(backslashedPos + 1);
-			string newPath = to + "\\" + directoryName;
-			if (Directory.Exists(newPath))
+			string newPath = to + (to[to.Length-1]=='\\'?"":"\\") + directoryName;
+			if (!Directory.Exists(newPath))
 				Directory.CreateDirectory(newPath);
 			foreach (var file in Directory.GetFiles(from))
 				CopyFileSafety(file, newPath, copy, ao);
 			foreach (var directory in Directory.GetDirectories(from))
 				CopyDirectory(directory, newPath, copy, ao);
+
+			if (!copy)
+				Directory.Delete(from);
 		}
 
 		/// <summary>
@@ -282,6 +289,8 @@ namespace CCRemote
 		/// <returns></returns>
 		private static long GetSize(string path)
 		{
+			if (!File.Exists(path) && !Directory.Exists(path))
+				return 0L;
 			if (!IsDirectory(path))
 				return new FileInfo(path).Length;
 
