@@ -28,6 +28,7 @@ namespace CCRemote
 		/// 请求格式：路径
 		/// 回应格式：当前目录字节数 + 当前目录 + (内容属性 + 内容路径字节数 + 内容路径) * N
 		///			       4字节                      4字节       4字节
+		///			  若目录不存在，则当前目录字节数为-1
 		/// </summary>
 		/// <param name="body"></param>
 		/// <returns></returns>
@@ -36,34 +37,36 @@ namespace CCRemote
 			List<byte> response = new List<byte>();
 			FileAttributes mask = FileAttributes.Hidden | FileAttributes.System;
 
-			try
+			string directoryPath = Encoding.UTF8.GetString(body.ToArray());
+			
+			#region Translate Special Path
+
+			switch (directoryPath)
 			{
-				string directoryPath = Encoding.UTF8.GetString(body.ToArray());
-
-				#region Translate Special Path
-
-				switch (directoryPath)
-				{
-					case DESKTOP:
-						directoryPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-						break;
-				}
-
-				#endregion
-
-				string[] pathes = Directory.GetFileSystemEntries(directoryPath);
-				response.AddString(directoryPath);
-				foreach (var path in pathes)
-				{
-					FileAttributes attributes = File.GetAttributes(path);
-					if ((attributes & mask) == mask) // 不显示系统隐藏文件
-						continue;
-
-					response.AddInt((int)attributes);
-					response.AddString(path);
-				}
+				case DESKTOP:
+					directoryPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+					break;
 			}
-			catch { }
+
+			#endregion
+
+			if (!Directory.Exists(directoryPath))
+			{
+				response.AddInt(-1);
+				return response;
+			}
+			string[] pathes = Directory.GetFileSystemEntries(directoryPath);
+			response.AddString(directoryPath);
+			foreach (var path in pathes)
+			{
+				FileAttributes attributes = File.GetAttributes(path);
+				if ((attributes & mask) == mask) // 不显示系统隐藏文件
+					continue;
+
+				response.AddInt((int)attributes);
+				response.AddString(path);
+			}
+
 			return response;
 		}
 
@@ -179,6 +182,19 @@ namespace CCRemote
 			}
 		}
 
+		/// <summary>
+		/// 新建文件夹，若给定的路径已有文件/文件夹，则无动作
+		/// 请求格式：新文件夹路径
+		/// 回应格式：（空）
+		/// </summary>
+		/// <param name="body"></param>
+		public static void CreateDirectory(List<byte> body)
+		{
+			string path = Encoding.UTF8.GetString(body.ToArray());
+			if (!File.Exists(path))
+				Directory.CreateDirectory(path);
+		}
+
 		#endregion
 
 		#region Private Methods
@@ -191,13 +207,13 @@ namespace CCRemote
 		/// <param name="copy"> true为复制，false为剪切 </param>
 		private static void CopyFileSafety(string from, string to, bool copy, AsyncOperation ao)
 		{
-			if (!File.Exists(from))
-				return;
 			if (IsDirectory(from))
 			{
 				CopyDirectory(from, to, copy, ao);
 				return;
 			}
+			if (!File.Exists(from))
+				return;
 
 			if (!Directory.Exists(to))
 				Directory.CreateDirectory(to);
@@ -248,13 +264,13 @@ namespace CCRemote
 		/// <param name="copy"> true为复制，false为剪切 </param>
 		private static void CopyDirectory(string from, string to, bool copy, AsyncOperation ao)
 		{
-			if (!Directory.Exists(from))
-				return;
 			if (!IsDirectory(from))
 			{
 				CopyFileSafety(from, to, copy, ao);
 				return;
 			}
+			if (!Directory.Exists(from))
+				return;
 
 			int backslashedPos = from.LastIndexOf("\\");
 			if (backslashedPos == -1 || backslashedPos == from.Length - 1)

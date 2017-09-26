@@ -230,6 +230,7 @@ namespace CCRemote
 			private const int CUT_FILE = 123;
 			private const int PASTE_FILE = 1024;
 			private const int DELETE_FILE = 321;
+			private const int CREATE_DIRECTORY = 456;
 
 			#endregion
 
@@ -271,26 +272,37 @@ namespace CCRemote
 			/// <returns> 回应消息的内容 </returns>
 			public List<byte> GetResponse()
 			{
-				switch (head)
+				try
 				{
-					case GET_FILE_SYSTEM_ENTRIES:
-						return FileControl.GetFileSystemEntries(body);
-					case GET_DISKS:
-						return FileControl.GetDisks();
-					case COPY_FILE:
-						FileControl.CopyFilesToClipboard(body, true);
-						return null;
-					case CUT_FILE:
-						FileControl.CopyFilesToClipboard(body, false);
-						return null;
-					case PASTE_FILE:
-						FileControl.PasteFiles(body, SocketUtil.Instance.aoList);
-						return null;
-					case DELETE_FILE:
-						FileControl.DeleteFiles(body);
-						return null;
-					default:
-						return null;
+					switch (head)
+					{
+						case GET_FILE_SYSTEM_ENTRIES:
+							return FileControl.GetFileSystemEntries(body);
+						case GET_DISKS:
+							return FileControl.GetDisks();
+						case COPY_FILE:
+							FileControl.CopyFilesToClipboard(body, true);
+							return null;
+						case CUT_FILE:
+							FileControl.CopyFilesToClipboard(body, false);
+							return null;
+						case PASTE_FILE:
+							FileControl.PasteFiles(body, SocketUtil.Instance.aoList);
+							return null;
+						case DELETE_FILE:
+							FileControl.DeleteFiles(body);
+							return null;
+						case CREATE_DIRECTORY:
+							FileControl.CreateDirectory(body);
+							return null;
+						default:
+							return null;
+					}
+				}
+				catch (Exception e)
+				{
+					Console.WriteLine(e.StackTrace);
+					return null;
 				}
 			}
 		}
