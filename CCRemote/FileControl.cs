@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -193,6 +194,19 @@ namespace CCRemote
 			string path = Encoding.UTF8.GetString(body.ToArray());
 			if (!File.Exists(path))
 				Directory.CreateDirectory(path);
+		}
+
+		/// <summary>
+		/// 用默认方式打开文件/文件夹
+		/// 请求格式：文件路径
+		/// 回应格式：（空）
+		/// </summary>
+		/// <param name="path"></param>
+		public static void OpenFile(List<byte> body)
+		{
+			string path = Encoding.UTF8.GetString(body.ToArray());
+			if (File.Exists(path) || Directory.Exists(path))
+				Process.Start(path);
 		}
 
 		#endregion

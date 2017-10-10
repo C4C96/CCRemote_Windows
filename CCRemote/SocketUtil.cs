@@ -231,6 +231,7 @@ namespace CCRemote
 			private const int PASTE_FILE = 1024;
 			private const int DELETE_FILE = 321;
 			private const int CREATE_DIRECTORY = 456;
+			private const int OPEN_FILE = 1919;
 
 			#endregion
 
@@ -294,6 +295,9 @@ namespace CCRemote
 							return null;
 						case CREATE_DIRECTORY:
 							FileControl.CreateDirectory(body);
+							return null;
+						case OPEN_FILE:
+							FileControl.OpenFile(body);
 							return null;
 						default:
 							return null;
